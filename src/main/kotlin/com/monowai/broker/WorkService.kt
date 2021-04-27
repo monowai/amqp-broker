@@ -15,5 +15,8 @@ class WorkService {
 
     fun doSomeWork(workPayload: WorkPayload) {
         log.info("id ${workPayload.id} says ${workPayload.body}")
+        if (workPayload.id == "2") {
+            throw RuntimeException("Psuedo Error")
+        }
     }
 }

@@ -24,8 +24,8 @@ class BrokerDemoApplicationTests {
     @Test
     fun sendAndReceive() {
         assertThat(broker).isNotNull
-        val first = WorkPayload("1","Test Payload")
-        val second = WorkPayload("2","Test Payload")
+        val first = WorkPayload("1", "Test Payload")
+        val second = WorkPayload("2", "Test Payload")
         publisher.publish(first)
         publisher.publish(second)
         Thread.sleep(1000)

@@ -2,3 +2,13 @@ spring.rabbitmq:
     host: "localhost"
     username: "guest"
     password: "guest"
+
+logging:
+    level:
+        root: debug
+        javax: error
+        sun: error
+        jdk: error
+        org.springframework: info
+        org.springframework.boot.autoconfigure: error
+        org.springframework.integration.mapping: error

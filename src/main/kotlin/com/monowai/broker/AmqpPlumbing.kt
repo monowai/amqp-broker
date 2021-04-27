@@ -2,13 +2,17 @@ package com.monowai.broker
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
+import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Binding
 import org.springframework.amqp.core.BindingBuilder
 import org.springframework.amqp.core.DirectExchange
 import org.springframework.amqp.core.Exchange
 import org.springframework.amqp.core.Queue
+import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder
+import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer
 import org.springframework.context.annotation.Bean
 import org.springframework.integration.config.EnableIntegration
+import org.springframework.retry.interceptor.RetryOperationsInterceptor
 import org.springframework.stereotype.Component
 
 /**
@@ -19,27 +23,80 @@ import org.springframework.stereotype.Component
 class AmqpPlumbing {
 
     companion object {
-        const val workRoutingKey = "work"
+        const val workRoute = "work"
+        const val workRouteErr = "$workRoute-dlq"
+        const val incidentRoute = "incident"
+        const val durable = false
+        const val autoDelete = false
     }
 
     @Bean
-    fun exchange(): Exchange {
+    fun primaryExchange(): Exchange {
         return DirectExchange("demoExchange")
     }
 
     @Bean
     fun workQueue(): Queue {
         // You should think about your queue characteristics, don't just copy and paste this
-        return Queue("workQueue", false, false, true)
+        return Queue(workRoute, durable, false, autoDelete)
     }
 
     @Bean
-    fun workBinding(workQueue: Queue, exchange: Exchange): Binding {
+    fun workBinding(workQueue: Queue, primaryExchange: Exchange): Binding {
         return BindingBuilder
             .bind(workQueue)
-            .to(exchange)
-            .with(workRoutingKey)
+            .to(primaryExchange)
+            .with(workQueue.name)
             .noargs()
+    }
+
+    @Bean
+    fun workDlQueue(): Queue {
+        // You should think about your queue characteristics, don't just copy and paste this
+        return Queue(workRouteErr, durable, false, autoDelete)
+    }
+
+    @Bean
+    fun workDlqBinding(workDlQueue: Queue, primaryExchange: Exchange): Binding {
+        return BindingBuilder
+            .bind(workDlQueue)
+            .to(primaryExchange)
+            .with(workRouteErr)
+            .noargs()
+    }
+
+    @Bean
+    fun incidentQueue(): Queue {
+        return Queue(incidentRoute, durable, false, autoDelete)
+    }
+
+    @Bean
+    fun incidentBinding(incidentQueue: Queue, primaryExchange: Exchange): Binding {
+        return BindingBuilder
+            .bind(incidentQueue)
+            .to(primaryExchange)
+            .with(incidentRoute)
+            .noargs()
+    }
+
+    @Bean
+    fun workInterceptor(amqpTemplate: AmqpTemplate, primaryExchange: Exchange): RetryOperationsInterceptor {
+        // Route work to the DLQ if an error occurs
+        return RetryInterceptorBuilder.stateless()
+            .maxAttempts(1)
+            .recoverer(RepublishMessageRecoverer(amqpTemplate, primaryExchange.name, workRouteErr))
+            .build()
+    }
+
+    @Bean
+    fun incidentInterceptor(amqpTemplate: AmqpTemplate, primaryExchange: Exchange): RetryOperationsInterceptor {
+        // Notify something that an exception occurred
+        val recover = RepublishMessageRecoverer(amqpTemplate, primaryExchange.name, incidentRoute)
+        recover.setErrorRoutingKeyPrefix("")
+        return RetryInterceptorBuilder.stateless()
+            .maxAttempts(1)
+            .recoverer(recover)
+            .build()
     }
 
     /**
