@@ -1,19 +1,37 @@
 ## Overview
 
-Often, in corporates, developers operate on seriously locked down equipment where it may not be possible to install services like Docker on to their workstations.  This can lead to building and testing against services at a distance which should be avoided at all costs. This can in turn cause challenges on how to effectively test, particularly if you're being guided to build microservices, and lead to an over reliance on external services or mocking.  
+Often, in corporates, developers operate on seriously locked down equipment where it may not be possible to install
+services like Docker on to their workstations - ho hum.
 
-To support such cases, I wanted to provide a solid integration example that could 
+To support such cases, I wanted to provide a solid integration example that could
+
 * Demonstrate resilient loose coupling between services
-* Pure Java
+* Pure Java implementation
 * Testable integration flows including an AMQP message broker
 
-This project demonstrates a Pub+Sub example with advice handling for errors.  For simplicity, the publisher is also its own subscriber. 
+I used the QPID broker adapted from the Java 7 example in
+this [JIRA post](https://issues.apache.org/jira/browse/QPID-7747?page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel&focusedCommentId=15971267#comment-15971267)
+and updated to use the latest library versions
 
-The use case calls for the Spring AMQP client to connect with QPID for Unit Tests and, for completeness, RabbitMQ when running in "production mode".  Keep in mind that AMQP is a protocol and QPID/RabbitMQ are brokers.  It is not intended to test brokers.
+What is demonstrated here is common in orgs - Basic direct channel Pub/Sub with a custom Message Recoverer to use as an
+advice handler.
+
+* Try to process the message
+* Handle a process failure
+* Notify an Incident service that a failure has occurred (though you're probably better off monitoring the DLQ)
+
+For simplicity, the publisher is also its own subscriber.
+
+The use case calls for the Spring AMQP client to connect with QPID for Unit Tests and, for completeness, RabbitMQ when
+running in "production mode". AMQP is a protocol and QPID/RabbitMQ are brokers.
+
+This guide is not meant to represent the only way to do things. You should carefully review your integration
+requirements before settling on your exchange and queue approach and characteristics
 
 ### Microservice Characteristics Demonstrated
+
 * Loose Coupling
-* Lightweight Message Broker  
+* Lightweight Message Broker
 * Independently Testable
 
 ### Stack
@@ -24,25 +42,41 @@ The use case calls for the Spring AMQP client to connect with QPID for Unit Test
 * RabbitMQ (Run)
 * Gradle
 
+### Structure
+
+* Model - Simple domain model
+* Service - integration agnostic business services.
+* Integration - all AMPQ related classes
+
 ### QPID Broker
-In order to support multi-platform development and testing, the broker is created entirely programmatically.
+
+In order to support multi-platform development and testing, the broker is created programmatically.
 
 ```kotlin
 // Create a broker instance
 val broker = QpidMemoryBroker(9989, "guest", "guest")
+// If you're using Spring, props are read from the spring.rabbitmq.* props defined in your application.yaml
+@Autowired
+lateinit var qpidMemoryBroker: QpidMemoryBroker
 ```
 
-This broker has been adapted from Java 7 example in this [JIRA post](https://issues.apache.org/jira/browse/QPID-7747?page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel&focusedCommentId=15971267#comment-15971267) and updated to use the latest library versions
+You can run `BrokerDemoApplication` against a running instance of RabbitMQ. One of the key purposes of this example is
+to demonstrate unit testing.
+
+### Unit Testing
+
+Two test scenarios - success and simulated integration failure.
+
+* User/Pass auth to the broker is using `PLAIN`
 
 ### Running against Rabbit
+
+Rabbit is assumed to be started. You can do this simply with Docker
+
 ```bash
 docker container run -d --name rabbitmq -p 5672:5672 -p 15672:15672 -p 25672:25672 rabbitmq:3.8-management-alpine
 docker start rabbitmq
 ```
-
-### Notes on Unit Testing
-* Spring will likely throw a connection refused exception when the QPID broker is shutting down.  This can be ignored
-* User/Pass auth to the broker is using `PLAIN` 
 
 ### Further Reading
 

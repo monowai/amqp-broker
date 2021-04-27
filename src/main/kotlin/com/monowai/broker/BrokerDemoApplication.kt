@@ -1,5 +1,7 @@
 package com.monowai.broker
 
+import com.monowai.broker.integration.WorkPublisher
+import com.monowai.broker.model.WorkPayload
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import java.io.BufferedReader

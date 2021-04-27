@@ -1,6 +1,7 @@
-package com.monowai.broker
+package com.monowai.broker.integration
 
-import com.monowai.broker.AmqpPlumbing.Companion.workRoute
+import com.monowai.broker.integration.AmqpPlumbing.Companion.workRoute
+import com.monowai.broker.model.WorkPayload
 import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Exchange
 import org.springframework.context.annotation.Bean

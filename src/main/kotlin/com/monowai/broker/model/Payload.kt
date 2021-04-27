@@ -1,4 +1,4 @@
-package com.monowai.broker
+package com.monowai.broker.model
 
 /**
  * A simple payload contract to support tracking across service boundaries or in an async world.

@@ -2,50 +2,39 @@ package com.monowai.broker
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.monowai.broker.integration.WorkPublisher
+import com.monowai.broker.model.WorkPayload
+import com.monowai.broker.service.WorkService
 import com.rabbitmq.client.impl.LongStringHelper
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeast
 import org.mockito.Mockito.verify
+import org.springframework.amqp.rabbit.core.RabbitTemplate
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.mock.mockito.MockBean
 
 @SpringBootTest
 class BrokerDemoApplicationTests {
-    companion object {
-        @JvmStatic
-        val broker = QpidMemoryBroker(9989, "guest", "guest")
 
-        @JvmStatic
-        @AfterAll
-        fun shutDown() {
-            broker.close()
-        }
-    }
+    @Autowired
+    lateinit var qpidMemoryBroker: QpidMemoryBroker
 
     @Autowired
     lateinit var publisher: WorkPublisher.WorkGateway
 
     @Autowired
-    lateinit var listenerConfig: RabbitListenerConfig
+    lateinit var rabbitTemplate: RabbitTemplate
 
     @MockBean
     lateinit var workService: WorkService
 
     private val objectMapper = ObjectMapper().registerModule(KotlinModule())
 
-    @BeforeEach
-    fun resetDlq() {
-        listenerConfig.reset()
-    }
-
     @Test
     fun sendAndReceive() {
-        assertThat(broker).isNotNull
         val first = WorkPayload("1", "Test Payload")
         val second = WorkPayload("2", "Test Payload")
         publisher.publish(first)
@@ -64,7 +53,7 @@ class BrokerDemoApplicationTests {
         Thread.sleep(1000)
         verify(workService, atLeast(1)).doSomeWork(workPayload)
 
-        val message = listenerConfig.queueResults["work-dlq"]
+        val message = rabbitTemplate.receive("work-dlq")
         assertThat(message).isNotNull.hasFieldOrProperty("body")
 
         val fromDlq = objectMapper.readValue(message?.body, WorkPayload::class.java)
