@@ -20,8 +20,6 @@ class WorkSubscriber(
     private val connectionFactory: ConnectionFactory,
     private val workService: WorkService,
     private val workInterceptor: RetryOperationsInterceptor,
-    private val incidentInterceptor: RetryOperationsInterceptor
-
 ) {
     @Bean
     fun workToHandle(workQueue: Queue): StandardIntegrationFlow {
@@ -29,7 +27,7 @@ class WorkSubscriber(
             inboundAdapter(connectionFactory, workQueue)
                 .configureContainer { c: SimpleMessageListenerContainerSpec ->
                     c.concurrentConsumers(1)
-                    c.adviceChain(workInterceptor, incidentInterceptor)
+                    c.adviceChain(workInterceptor)
                 }
         ).transform(
             Transformers.fromJson(WorkPayload::class.java, Jackson2JsonObjectMapper())

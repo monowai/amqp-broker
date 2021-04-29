@@ -9,7 +9,6 @@ import org.springframework.amqp.core.DirectExchange
 import org.springframework.amqp.core.Exchange
 import org.springframework.amqp.core.Queue
 import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder
-import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer
 import org.springframework.context.annotation.Bean
 import org.springframework.integration.config.EnableIntegration
 import org.springframework.retry.interceptor.RetryOperationsInterceptor
@@ -84,18 +83,7 @@ class AmqpPlumbing {
         // Route work to the DLQ if an error occurs
         return RetryInterceptorBuilder.stateless()
             .maxAttempts(1)
-            .recoverer(RepublishMessageRecoverer(amqpTemplate, primaryExchange.name, workRouteErr))
-            .build()
-    }
-
-    @Bean
-    fun incidentInterceptor(amqpTemplate: AmqpTemplate, primaryExchange: Exchange): RetryOperationsInterceptor {
-        // Notify something that an exception occurred
-        val recover = RepublishMessageRecoverer(amqpTemplate, primaryExchange.name, incidentRoute)
-        recover.setErrorRoutingKeyPrefix("")
-        return RetryInterceptorBuilder.stateless()
-            .maxAttempts(1)
-            .recoverer(recover)
+            .recoverer(DemoRepublishMessageRecoverer(amqpTemplate, primaryExchange.name, workRouteErr))
             .build()
     }
 
