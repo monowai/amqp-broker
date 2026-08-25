@@ -32,6 +32,11 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
+    // Vendor-neutral tracing. Pulls Micrometer Tracing, the OpenTelemetry SDK and the OTLP
+    // exporter. Point it at any OTLP collector - Tempo, Jaeger, Honeycomb, a vendor agent -
+    // by setting one endpoint. Nothing here knows which.
+    implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+
     // The QPID broker is only started by the tests; it is not part of the runtime application.
     testImplementation("org.apache.qpid:qpid-broker-core:$qpidVersion")
     testImplementation("org.apache.qpid:qpid-broker-plugins-memory-store:$qpidVersion")
@@ -39,6 +44,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-amqp-test")
     testImplementation("org.springframework.integration:spring-integration-test")
     testImplementation("org.mockito:mockito-core")
+    // InMemorySpanExporter - lets the tests assert on real spans instead of trusting config.
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

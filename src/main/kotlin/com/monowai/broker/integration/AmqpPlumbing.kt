@@ -1,5 +1,6 @@
 package com.monowai.broker.integration
 
+import io.micrometer.tracing.Tracer
 import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Binding
 import org.springframework.amqp.core.BindingBuilder
@@ -22,7 +23,11 @@ class AmqpPlumbing {
         const val WORK_ROUTE = "work"
         const val WORK_ROUTE_ERR = "$WORK_ROUTE-dlq"
         const val INCIDENT_ROUTE = "incident"
-        const val DURABLE = false
+
+        // RabbitMQ 4 deprecated transient non-exclusive queues and refuses to declare them:
+        //   INTERNAL_ERROR - Feature `transient_nonexcl_queues` is deprecated
+        // QPID accepts them, so this only shows up when you run against a real broker. Durable it is.
+        const val DURABLE = true
         const val AUTO_DELETE = false
     }
 
@@ -82,11 +87,12 @@ class AmqpPlumbing {
         amqpTemplate: AmqpTemplate,
         primaryExchange: Exchange,
         incidentGateway: IncidentPublisher.IncidentGateway,
+        tracer: Tracer,
     ): StatelessRetryOperationsInterceptor {
         // Route work to the DLQ if an error occurs. A single delivery attempt, so no retries.
         // Spring AMQP 4 omits the x-exception-stacktrace header unless includeStackTrace is opted into.
         val recoverer =
-            DemoRepublishMessageRecoverer(amqpTemplate, primaryExchange.name, WORK_ROUTE_ERR, incidentGateway)
+            DemoRepublishMessageRecoverer(amqpTemplate, primaryExchange.name, WORK_ROUTE_ERR, incidentGateway, tracer)
                 .includeStackTrace(true)
         return RetryInterceptorBuilder
             .stateless()

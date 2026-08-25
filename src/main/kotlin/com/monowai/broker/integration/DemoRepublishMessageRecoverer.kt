@@ -2,6 +2,7 @@ package com.monowai.broker.integration
 
 import com.monowai.broker.integration.IncidentPublisher.IncidentGateway
 import com.monowai.broker.model.IncidentPayload
+import io.micrometer.tracing.Tracer
 import org.springframework.amqp.AmqpRejectAndDontRequeueException
 import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Message
@@ -18,12 +19,17 @@ class DemoRepublishMessageRecoverer(
     errorExchange: String,
     errorRoutingKey: String,
     private val incidentGateway: IncidentGateway,
+    private val tracer: Tracer,
 ) : RepublishMessageRecoverer(errorTemplate, errorExchange, errorRoutingKey) {
     override fun recover(
         message: Message,
         cause: Throwable,
     ) {
         val rootCause = getCause(cause)
+        // Mark the consumer span failed. Spring AMQP treats a recovered message as handled, so
+        // without this the trace shows a DLQ hop with no indication of why. Costs one line; turns
+        // "something odd happened" into a red span with the stack trace attached.
+        tracer.currentSpan()?.error(rootCause)
         // The DLQ is the system of record for the failed message - park it there first.
         super.recover(message, rootCause)
         // ...then tell someone. Losing the notification must not lose the message.

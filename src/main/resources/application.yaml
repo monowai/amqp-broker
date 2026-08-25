@@ -1,12 +1,39 @@
 spring:
+    application.name: "amqp-broker-demo"
     # Java 25 - listener containers and the web/task executors run on virtual threads.
     threads.virtual.enabled: true
     rabbitmq:
         host: "localhost"
         username: "guest"
         password: "guest"
+        # Publish spans, and stamp the W3C traceparent header onto every outgoing message.
+        template.observation-enabled: true
+        # Covers containers Boot creates. The Spring Integration DSL builds its own - see WorkSubscriber.
+        listener.simple.observation-enabled: true
+
+management:
+    tracing:
+        # Demo. Sample everything. In production this is the dial you turn down first.
+        sampling.probability: 1.0
+    opentelemetry:
+        resource-attributes:
+            deployment.environment: "${DEPLOYMENT_ENVIRONMENT:local}"
+    # This demo is about traces. Metrics export defaults to on and would sit there failing to
+    # reach a collector nobody started.
+    otlp.metrics.export.enabled: false
+
+# No OTLP endpoint is configured here on purpose. With none set, spans are still created and still
+# stamp traceId/spanId onto every log line - they simply are not shipped anywhere. Point them at any
+# OTLP collector (Tempo, Jaeger, Honeycomb, an OTEL Collector) with one environment variable:
+#
+#   MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+#
+# Nothing in this codebase names a vendor.
 
 logging:
+    # traceId/spanId in every line. The cheapest half of distributed tracing.
+    pattern.correlation: "[${spring.application.name:},%X{traceId:-},%X{spanId:-}] "
+    include-application-name: false
     level:
         root: debug
         javax: error

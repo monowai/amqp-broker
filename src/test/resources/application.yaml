@@ -1,4 +1,20 @@
 spring:
+  application.name: "amqp-broker-demo"
   threads.virtual.enabled: true
+  rabbitmq:
+    template.observation-enabled: true
+    listener.simple.observation-enabled: true
 # spring.rabbitmq.port is not set here on purpose - QpidBrokerConfig publishes the port the broker
 # actually bound to, so parallel builds on one machine cannot collide.
+
+management:
+  tracing:
+    # Every span, so assertions are deterministic.
+    sampling.probability: 1.0
+  # No OTLP endpoint - TracingTestConfig collects spans in memory instead. Metrics export defaults
+  # to on and would spend the build retrying a collector that is not there.
+  otlp.metrics.export.enabled: false
+
+logging:
+  pattern.correlation: "[${spring.application.name:},%X{traceId:-},%X{spanId:-}] "
+  include-application-name: false

@@ -31,6 +31,9 @@ class WorkSubscriber(
                     .configureContainer { c: SimpleMessageListenerContainerSpec ->
                         c.concurrentConsumers(1)
                         c.adviceChain(workInterceptor)
+                        // The DSL builds its own container, so spring.rabbitmq.listener.* never reaches it.
+                        // Without this the consumer starts a fresh trace and the publisher's is orphaned.
+                        c.`object`.setObservationEnabled(true)
                     },
             ).transform(
                 // Spring Integration only deserialises `__TypeId__` classes from packages it has been told to trust.

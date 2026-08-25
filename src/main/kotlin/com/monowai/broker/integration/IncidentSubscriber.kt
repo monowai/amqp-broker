@@ -29,6 +29,8 @@ class IncidentSubscriber(
                     .inboundAdapter(connectionFactory, incidentQueue)
                     .configureContainer { c: SimpleMessageListenerContainerSpec ->
                         c.concurrentConsumers(1)
+                        // Keeps the incident in the same trace as the work that failed - see WorkSubscriber.
+                        c.`object`.setObservationEnabled(true)
                     },
             ).transform(
                 // Spring Integration only deserialises `__TypeId__` classes from packages it has been told to trust.
