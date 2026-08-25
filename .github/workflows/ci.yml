@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The wrapper jar is a binary in the repo. Check it is the one Gradle published.
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # ktlintCheck and the QPID-backed tests both hang off `build`.
+      # The whole point of the in-memory broker is that this needs no services.
+      - run: ./gradlew build
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+
+  rabbitmq:
+    name: Smoke test against RabbitMQ
+    runs-on: ubuntu-latest
+    services:
+      # The unit tests run on QPID. They will not catch a broker that refuses our queue
+      # declarations - RabbitMQ 4 rejecting transient non-exclusive queues did exactly that.
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        ports: ['5672:5672']
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t amqp-broker-demo:ci .
+
+      - name: Publish and consume against a real broker
+        run: |
+          set -o pipefail
+          echo q | docker run -i --rm --network host \
+            -e SPRING_RABBITMQ_HOST=localhost \
+            -e LOGGING_LEVEL_ROOT=info \
+            amqp-broker-demo:ci 2>&1 | tee run.log
+
+      - name: Assert work was consumed and traced
+        run: |
+          grep -q "WorkService  *: id .* says Hello World" run.log \
+            || { echo "::error::No work was consumed"; exit 1; }
+          # The correlation pattern is [app,traceId,spanId]. A populated traceId on a business
+          # log line proves the consumer ran inside the publisher's trace.
+          grep -qE "\[amqp-broker-demo,[0-9a-f]{32},[0-9a-f]{16}\] +WorkService" run.log \
+            || { echo "::error::Work was consumed outside a trace"; exit 1; }
+          echo "Consumed and traced."
