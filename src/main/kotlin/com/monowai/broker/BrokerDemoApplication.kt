@@ -9,9 +9,7 @@ import java.io.InputStreamReader
 
 @SpringBootApplication
 class BrokerDemoApplication {
-
     companion object {
-
         @JvmStatic
         fun main(args: Array<String>) {
             val ctx = runApplication<BrokerDemoApplication>(*args)
@@ -26,7 +24,7 @@ class BrokerDemoApplication {
                 }
                 i = 1
                 input = reader.readLine()
-            } while (input == null || !input.toString().toLowerCase().startsWith("q"))
+            } while (input == null || !input.lowercase().startsWith("q"))
             ctx.close()
         }
     }

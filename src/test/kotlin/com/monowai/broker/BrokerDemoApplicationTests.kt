@@ -1,9 +1,9 @@
 package com.monowai.broker
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.monowai.broker.integration.WorkPublisher
+import com.monowai.broker.model.IncidentPayload
 import com.monowai.broker.model.WorkPayload
+import com.monowai.broker.service.IncidentService
 import com.monowai.broker.service.WorkService
 import com.rabbitmq.client.impl.LongStringHelper
 import org.assertj.core.api.Assertions.assertThat
@@ -11,14 +11,18 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeast
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.amqp.rabbit.core.RabbitTemplate
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.context.annotation.Import
+import org.springframework.test.context.bean.override.mockito.MockitoBean
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.kotlinModule
 
 @SpringBootTest
+@Import(QpidBrokerConfig::class)
 class BrokerDemoApplicationTests {
-
     @Autowired
     lateinit var qpidMemoryBroker: QpidMemoryBroker
 
@@ -28,10 +32,13 @@ class BrokerDemoApplicationTests {
     @Autowired
     lateinit var rabbitTemplate: RabbitTemplate
 
-    @MockBean
+    @MockitoBean
     lateinit var workService: WorkService
 
-    private val objectMapper = ObjectMapper().registerModule(KotlinModule())
+    @MockitoBean
+    lateinit var incidentService: IncidentService
+
+    private val objectMapper = JsonMapper.builder().addModule(kotlinModule()).build()
 
     @Test
     fun sendAndReceive() {
@@ -59,10 +66,23 @@ class BrokerDemoApplicationTests {
         val fromDlq = objectMapper.readValue(message?.body, WorkPayload::class.java)
 
         assertThat(fromDlq).usingRecursiveComparison().isEqualTo(workPayload)
-        val exceptionMessage = (
-            LongStringHelper
-                .asLongString(message?.messageProperties!!.headers["x-exception-stacktrace"].toString()) as Any
+        val exceptionMessage =
+            (
+                LongStringHelper
+                    .asLongString(message?.messageProperties!!.headers["x-exception-stacktrace"].toString()) as Any
             ).toString()
         assertThat(exceptionMessage).isNotNull.contains(exception.message)
+
+        // The failure is also announced on its own route. The Incident service knows nothing about AMQP,
+        // and the incident id is the original WorkPayload.id carried across as the AMQP correlationId.
+        verify(incidentService, atLeast(1))
+            .raiseIncident(IncidentPayload(workPayload.id, exception.message!!))
+    }
+
+    @Test
+    fun successRaisesNoIncident() {
+        publisher.publish(WorkPayload("no-incident", "Test Payload"))
+        Thread.sleep(1000)
+        verifyNoInteractions(incidentService)
     }
 }

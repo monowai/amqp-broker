@@ -1,17 +1,25 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-val qpidVersion: String = "8.0.4"
+val qpidVersion = "10.1.0"
+val kotlinVersion = "2.4.10"
 
 plugins {
-    id("org.springframework.boot") version "2.4.5"
-    id("io.spring.dependency-management") version "1.0.11.RELEASE"
-    kotlin("jvm") version "1.4.32"
-    kotlin("plugin.spring") version "1.4.32"
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.spring") version "2.4.10"
+    id("org.springframework.boot") version "4.1.1"
+    id("io.spring.dependency-management") version "1.1.7"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
 group = "com.monowai"
 version = "0.0.1-SNAPSHOT"
-java.sourceCompatibility = JavaVersion.VERSION_11
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+// Keep the Spring Boot BOM in step with the Kotlin plugin above.
+extra["kotlin.version"] = kotlinVersion
 
 repositories {
     mavenCentral()
@@ -20,24 +28,22 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-amqp")
     implementation("org.springframework.boot:spring-boot-starter-integration")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("org.apache.qpid:qpid-broker-core:8.0.4")
-    implementation("org.apache.qpid:qpid-broker-plugins-memory-store:8.0.4")
-    implementation("org.apache.qpid:qpid-broker-plugins-amqp-0-8-protocol:8.0.4")
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("org.springframework.integration:spring-integration-amqp")
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.amqp:spring-rabbit-test")
+    implementation("tools.jackson.module:jackson-module-kotlin")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+
+    // The QPID broker is only started by the tests; it is not part of the runtime application.
+    testImplementation("org.apache.qpid:qpid-broker-core:$qpidVersion")
+    testImplementation("org.apache.qpid:qpid-broker-plugins-memory-store:$qpidVersion")
+    testImplementation("org.apache.qpid:qpid-broker-plugins-amqp-0-8-protocol:$qpidVersion")
+    testImplementation("org.springframework.boot:spring-boot-starter-amqp-test")
     testImplementation("org.springframework.integration:spring-integration-test")
     testImplementation("org.mockito:mockito-core")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        freeCompilerArgs = listOf("-Xjsr305=strict")
-        jvmTarget = "11"
-    }
+ktlint {
+    version = "1.8.0"
 }
 
 tasks.withType<Test> {

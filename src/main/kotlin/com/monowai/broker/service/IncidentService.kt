@@ -12,6 +12,6 @@ class IncidentService {
     }
 
     fun raiseIncident(payload: Payload<*>) {
-        log.info("An incident with the ID of ${payload.id} has occurred")
+        log.info("An incident with the ID of ${payload.id} has occurred - ${payload.body}")
     }
 }

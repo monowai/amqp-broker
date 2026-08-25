@@ -1,7 +1,9 @@
 package com.monowai.broker.model
 
-data class WorkPayload(override val id: String, override val body: String) : Payload<String> {
-
+data class WorkPayload(
+    override val id: String,
+    override val body: String,
+) : Payload<String> {
     // Object contract is for Mockito verification
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -14,7 +16,5 @@ data class WorkPayload(override val id: String, override val body: String) : Pay
         return true
     }
 
-    override fun hashCode(): Int {
-        return id.hashCode()
-    }
+    override fun hashCode(): Int = id.hashCode()
 }

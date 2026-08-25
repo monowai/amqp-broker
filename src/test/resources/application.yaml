@@ -1,3 +1,4 @@
 spring:
-  rabbitmq:
-    port: 9989
+  threads.virtual.enabled: true
+# spring.rabbitmq.port is not set here on purpose - QpidBrokerConfig publishes the port the broker
+# actually bound to, so parallel builds on one machine cannot collide.

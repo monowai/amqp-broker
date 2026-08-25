@@ -1,7 +1,5 @@
 package com.monowai.broker.integration
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.KotlinModule
 import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Binding
 import org.springframework.amqp.core.BindingBuilder
@@ -9,9 +7,9 @@ import org.springframework.amqp.core.DirectExchange
 import org.springframework.amqp.core.Exchange
 import org.springframework.amqp.core.Queue
 import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder
+import org.springframework.amqp.rabbit.config.StatelessRetryOperationsInterceptor
 import org.springframework.context.annotation.Bean
 import org.springframework.integration.config.EnableIntegration
-import org.springframework.retry.interceptor.RetryOperationsInterceptor
 import org.springframework.stereotype.Component
 
 /**
@@ -20,78 +18,80 @@ import org.springframework.stereotype.Component
 @EnableIntegration
 @Component
 class AmqpPlumbing {
-
     companion object {
-        const val workRoute = "work"
-        const val workRouteErr = "$workRoute-dlq"
-        const val incidentRoute = "incident"
-        const val durable = false
-        const val autoDelete = false
+        const val WORK_ROUTE = "work"
+        const val WORK_ROUTE_ERR = "$WORK_ROUTE-dlq"
+        const val INCIDENT_ROUTE = "incident"
+        const val DURABLE = false
+        const val AUTO_DELETE = false
     }
 
     @Bean
-    fun primaryExchange(): Exchange {
-        return DirectExchange("demoExchange")
-    }
+    fun primaryExchange(): Exchange = DirectExchange("demoExchange")
 
     @Bean
     fun workQueue(): Queue {
         // You should think about your queue characteristics, don't just copy and paste this
-        return Queue(workRoute, durable, false, autoDelete)
+        return Queue(WORK_ROUTE, DURABLE, false, AUTO_DELETE)
     }
 
     @Bean
-    fun workBinding(workQueue: Queue, primaryExchange: Exchange): Binding {
-        return BindingBuilder
+    fun workBinding(
+        workQueue: Queue,
+        primaryExchange: Exchange,
+    ): Binding =
+        BindingBuilder
             .bind(workQueue)
             .to(primaryExchange)
             .with(workQueue.name)
             .noargs()
-    }
 
     @Bean
     fun workDlQueue(): Queue {
         // You should think about your queue characteristics, don't just copy and paste this
-        return Queue(workRouteErr, durable, false, autoDelete)
+        return Queue(WORK_ROUTE_ERR, DURABLE, false, AUTO_DELETE)
     }
 
     @Bean
-    fun workDlqBinding(workDlQueue: Queue, primaryExchange: Exchange): Binding {
-        return BindingBuilder
+    fun workDlqBinding(
+        workDlQueue: Queue,
+        primaryExchange: Exchange,
+    ): Binding =
+        BindingBuilder
             .bind(workDlQueue)
             .to(primaryExchange)
-            .with(workRouteErr)
+            .with(WORK_ROUTE_ERR)
             .noargs()
-    }
 
     @Bean
-    fun incidentQueue(): Queue {
-        return Queue(incidentRoute, durable, false, autoDelete)
-    }
+    fun incidentQueue(): Queue = Queue(INCIDENT_ROUTE, DURABLE, false, AUTO_DELETE)
 
     @Bean
-    fun incidentBinding(incidentQueue: Queue, primaryExchange: Exchange): Binding {
-        return BindingBuilder
+    fun incidentBinding(
+        incidentQueue: Queue,
+        primaryExchange: Exchange,
+    ): Binding =
+        BindingBuilder
             .bind(incidentQueue)
             .to(primaryExchange)
-            .with(incidentRoute)
+            .with(INCIDENT_ROUTE)
             .noargs()
-    }
 
     @Bean
-    fun workInterceptor(amqpTemplate: AmqpTemplate, primaryExchange: Exchange): RetryOperationsInterceptor {
-        // Route work to the DLQ if an error occurs
-        return RetryInterceptorBuilder.stateless()
-            .maxAttempts(1)
-            .recoverer(DemoRepublishMessageRecoverer(amqpTemplate, primaryExchange.name, workRouteErr))
+    fun workInterceptor(
+        amqpTemplate: AmqpTemplate,
+        primaryExchange: Exchange,
+        incidentGateway: IncidentPublisher.IncidentGateway,
+    ): StatelessRetryOperationsInterceptor {
+        // Route work to the DLQ if an error occurs. A single delivery attempt, so no retries.
+        // Spring AMQP 4 omits the x-exception-stacktrace header unless includeStackTrace is opted into.
+        val recoverer =
+            DemoRepublishMessageRecoverer(amqpTemplate, primaryExchange.name, WORK_ROUTE_ERR, incidentGateway)
+                .includeStackTrace(true)
+        return RetryInterceptorBuilder
+            .stateless()
+            .maxRetries(0)
+            .recoverer(recoverer)
             .build()
-    }
-
-    /**
-     * Overriding the standard Spring ObjectMapper to provider richer support for Kotlin data.
-     */
-    @Bean
-    fun getObjectMapper(): ObjectMapper {
-        return ObjectMapper().registerModule(KotlinModule())
     }
 }

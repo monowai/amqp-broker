@@ -1,10 +1,9 @@
 package com.monowai.broker.integration
 
-import com.monowai.broker.integration.AmqpPlumbing.Companion.WORK_ROUTE
-import com.monowai.broker.model.WorkPayload
+import com.monowai.broker.integration.AmqpPlumbing.Companion.INCIDENT_ROUTE
+import com.monowai.broker.model.IncidentPayload
 import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Exchange
-import org.springframework.amqp.support.AmqpHeaders
 import org.springframework.context.annotation.Bean
 import org.springframework.integration.amqp.dsl.Amqp.outboundAdapter
 import org.springframework.integration.annotation.MessagingGateway
@@ -17,37 +16,38 @@ import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 
 /**
- * Wires up the integration flow to publish a payload to a Queue
+ * Wires up the integration flow that announces a processing failure.
+ *
+ * This is deliberately a separate route to the DLQ. The DLQ owns the failed message so it can be
+ * replayed; the incident is a lightweight notification that something needs a human. Neither knows
+ * about the other, which is the point.
  */
 @Service
-class WorkPublisher {
+class IncidentPublisher {
     /**
      * This is an arbitrary name used to start the flow.
      */
     @Bean
-    fun sendWork(): DirectChannelSpec = MessageChannels.direct()
+    fun sendIncident(): DirectChannelSpec = MessageChannels.direct()
 
     @Bean
-    fun workPublisherFlow(
-        sendWork: MessageChannel,
+    fun incidentPublisherFlow(
+        sendIncident: MessageChannel,
         amqpTemplate: AmqpTemplate,
         primaryExchange: Exchange,
     ): IntegrationFlow =
         IntegrationFlow
-            .from(sendWork)
-            // Promote Payload.id to the AMQP correlationId while the payload is still typed. Anything
-            // downstream - including error handling - can then correlate without parsing the body.
-            .enrichHeaders { h -> h.headerFunction<WorkPayload>(AmqpHeaders.CORRELATION_ID) { m -> m.payload.id } }
+            .from(sendIncident)
             .transform(ObjectToJsonTransformer()) // sent as Json
             .handle(
                 outboundAdapter(amqpTemplate)
                     .exchangeName(primaryExchange.name) // To this exchange
-                    .routingKey(WORK_ROUTE), // via this route
+                    .routingKey(INCIDENT_ROUTE), // via this route
             ).get()
 
-    @MessagingGateway(defaultRequestChannel = "sendWork")
+    @MessagingGateway(defaultRequestChannel = "sendIncident")
     @Component
-    interface WorkGateway {
-        fun publish(workPayload: WorkPayload)
+    interface IncidentGateway {
+        fun publish(incidentPayload: IncidentPayload)
     }
 }

@@ -1,7 +1,10 @@
-spring.rabbitmq:
-    host: "localhost"
-    username: "guest"
-    password: "guest"
+spring:
+    # Java 25 - listener containers and the web/task executors run on virtual threads.
+    threads.virtual.enabled: true
+    rabbitmq:
+        host: "localhost"
+        username: "guest"
+        password: "guest"
 
 logging:
     level:
