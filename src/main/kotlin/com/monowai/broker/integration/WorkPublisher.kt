@@ -6,48 +6,35 @@ import org.springframework.amqp.core.AmqpTemplate
 import org.springframework.amqp.core.Exchange
 import org.springframework.amqp.support.AmqpHeaders
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.integration.amqp.dsl.Amqp.outboundAdapter
-import org.springframework.integration.annotation.MessagingGateway
-import org.springframework.integration.dsl.DirectChannelSpec
 import org.springframework.integration.dsl.IntegrationFlow
-import org.springframework.integration.dsl.MessageChannels
+import org.springframework.integration.dsl.integrationFlow
 import org.springframework.integration.json.ObjectToJsonTransformer
-import org.springframework.messaging.MessageChannel
-import org.springframework.stereotype.Component
-import org.springframework.stereotype.Service
 
 /**
- * Wires up the integration flow to publish a payload to a Queue
+ * Publishes a payload to the work queue.
  */
-@Service
+@Configuration
 class WorkPublisher {
     /**
-     * This is an arbitrary name used to start the flow.
+     * Starting a flow from an interface makes [WorkGateway] the flow's input. No channel bean, no
+     * `defaultRequestChannel = "someString"`, nothing to keep in sync.
      */
     @Bean
-    fun sendWork(): DirectChannelSpec = MessageChannels.direct()
-
-    @Bean
     fun workPublisherFlow(
-        sendWork: MessageChannel,
         amqpTemplate: AmqpTemplate,
         primaryExchange: Exchange,
     ): IntegrationFlow =
-        IntegrationFlow
-            .from(sendWork)
+        integrationFlow<WorkGateway> {
             // Promote Payload.id to the AMQP correlationId while the payload is still typed. Anything
             // downstream - including error handling - can then correlate without parsing the body.
-            .enrichHeaders { h -> h.headerFunction<WorkPayload>(AmqpHeaders.CORRELATION_ID) { m -> m.payload.id } }
-            .transform(ObjectToJsonTransformer()) // sent as Json
-            .handle(
+            enrichHeaders { headerFunction<WorkPayload>(AmqpHeaders.CORRELATION_ID) { it.payload.id } }
+            transform(ObjectToJsonTransformer()) // sent as Json
+            handle(
                 outboundAdapter(amqpTemplate)
                     .exchangeName(primaryExchange.name) // To this exchange
                     .routingKey(WORK_ROUTE), // via this route
-            ).get()
-
-    @MessagingGateway(defaultRequestChannel = "sendWork")
-    @Component
-    interface WorkGateway {
-        fun publish(workPayload: WorkPayload)
-    }
+            )
+        }
 }

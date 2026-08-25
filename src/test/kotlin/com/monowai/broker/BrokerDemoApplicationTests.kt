@@ -1,6 +1,6 @@
 package com.monowai.broker
 
-import com.monowai.broker.integration.WorkPublisher
+import com.monowai.broker.integration.WorkGateway
 import com.monowai.broker.model.IncidentPayload
 import com.monowai.broker.model.WorkPayload
 import com.monowai.broker.service.IncidentService
@@ -27,7 +27,7 @@ class BrokerDemoApplicationTests {
     lateinit var qpidMemoryBroker: QpidMemoryBroker
 
     @Autowired
-    lateinit var publisher: WorkPublisher.WorkGateway
+    lateinit var publisher: WorkGateway
 
     @Autowired
     lateinit var rabbitTemplate: RabbitTemplate
@@ -46,9 +46,10 @@ class BrokerDemoApplicationTests {
         val second = WorkPayload("2", "Test Payload")
         publisher.publish(first)
         publisher.publish(second)
-        Thread.sleep(1000)
-        verify(workService, atLeast(1)).doSomeWork(first)
-        verify(workService, atLeast(1)).doSomeWork(second)
+        awaitAsserted {
+            verify(workService, atLeast(1)).doSomeWork(first)
+            verify(workService, atLeast(1)).doSomeWork(second)
+        }
     }
 
     @Test
@@ -57,10 +58,11 @@ class BrokerDemoApplicationTests {
         val exception = RuntimeException("Something Went Wrong")
         Mockito.`when`(workService.doSomeWork(workPayload)).thenThrow(exception)
         publisher.publish(workPayload)
-        Thread.sleep(1000)
-        verify(workService, atLeast(1)).doSomeWork(workPayload)
+        awaitAsserted { verify(workService, atLeast(1)).doSomeWork(workPayload) }
 
-        val message = rabbitTemplate.receive("work-dlq")
+        // Blocking receive. The DLQ hop is asynchronous, so ask the broker to wait rather than
+        // guessing how long it takes.
+        val message = rabbitTemplate.receive(WORK_DLQ, AWAIT_TIMEOUT_MS)
         assertThat(message).isNotNull.hasFieldOrProperty("body")
 
         val fromDlq = objectMapper.readValue(message?.body, WorkPayload::class.java)
@@ -75,14 +77,48 @@ class BrokerDemoApplicationTests {
 
         // The failure is also announced on its own route. The Incident service knows nothing about AMQP,
         // and the incident id is the original WorkPayload.id carried across as the AMQP correlationId.
-        verify(incidentService, atLeast(1))
-            .raiseIncident(IncidentPayload(workPayload.id, exception.message!!))
+        awaitAsserted {
+            verify(incidentService, atLeast(1))
+                .raiseIncident(IncidentPayload(workPayload.id, exception.message!!))
+        }
     }
 
     @Test
     fun successRaisesNoIncident() {
-        publisher.publish(WorkPayload("no-incident", "Test Payload"))
-        Thread.sleep(1000)
+        val payload = WorkPayload("no-incident", "Test Payload")
+        publisher.publish(payload)
+
+        // Once the service has seen it and not thrown, the recoverer never ran, so nothing is still
+        // in flight that could raise an incident. That makes the negative assertion below a fact
+        // rather than a guess about how long to wait.
+        awaitAsserted { verify(workService, atLeast(1)).doSomeWork(payload) }
         verifyNoInteractions(incidentService)
+    }
+
+    /**
+     * Retry the assertion until it holds or we run out of patience.
+     *
+     * Everything here crosses a broker, so the alternative is a fixed sleep - which is either slower
+     * than it needs to be or too short on a loaded CI box, and usually both.
+     */
+    private fun awaitAsserted(assertion: () -> Unit) {
+        val deadline = System.currentTimeMillis() + AWAIT_TIMEOUT_MS
+        while (true) {
+            try {
+                assertion()
+                return
+            } catch (error: AssertionError) {
+                if (System.currentTimeMillis() >= deadline) {
+                    throw error
+                }
+                Thread.sleep(POLL_MS)
+            }
+        }
+    }
+
+    companion object {
+        private const val WORK_DLQ = "work-dlq"
+        private const val AWAIT_TIMEOUT_MS = 5000L
+        private const val POLL_MS = 25L
     }
 }

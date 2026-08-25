@@ -1,6 +1,5 @@
 package com.monowai.broker.integration
 
-import com.monowai.broker.integration.IncidentPublisher.IncidentGateway
 import com.monowai.broker.model.IncidentPayload
 import io.micrometer.tracing.Tracer
 import org.springframework.amqp.AmqpRejectAndDontRequeueException
@@ -18,7 +17,7 @@ class DemoRepublishMessageRecoverer(
     errorTemplate: AmqpTemplate,
     errorExchange: String,
     errorRoutingKey: String,
-    private val incidentGateway: IncidentGateway,
+    private val incidentGateway: () -> IncidentGateway,
     private val tracer: Tracer,
 ) : RepublishMessageRecoverer(errorTemplate, errorExchange, errorRoutingKey) {
     override fun recover(
@@ -42,7 +41,7 @@ class DemoRepublishMessageRecoverer(
     ) {
         val correlationId = correlationId(message)
         try {
-            incidentGateway.publish(
+            incidentGateway().publish(
                 IncidentPayload(correlationId, cause.message ?: cause.javaClass.simpleName),
             )
         } catch (e: RuntimeException) {
@@ -56,14 +55,19 @@ class DemoRepublishMessageRecoverer(
      */
     private fun correlationId(message: Message): String = message.messageProperties.correlationId ?: "unknown"
 
+    /**
+     * Strips the AMQP plumbing so the DLQ carries the business failure, not the framework's wrapper.
+     *
+     * Bounded on purpose - a `cause` chain that references itself is rare but real, and the previous
+     * recursive version would have gone round it until the stack ran out.
+     */
     private fun getCause(cause: Throwable): Throwable {
-        // Strips out AmqpListener exception to provide a cleaner stack trace in the DLQ
-        if (cause.cause == null) {
-            return cause
-        }
-        if (cause is AmqpRejectAndDontRequeueException) {
-            return cause.cause!!
-        }
-        return getCause(cause.cause!!)
+        val chain = generateSequence(cause) { it.cause }.take(MAX_CAUSE_DEPTH).toList()
+        val rejection = chain.firstOrNull { it is AmqpRejectAndDontRequeueException }
+        return rejection?.cause ?: chain.last()
+    }
+
+    private companion object {
+        const val MAX_CAUSE_DEPTH = 20
     }
 }

@@ -3,7 +3,6 @@
 .kotlin
 .idea
 build
-**/build
 *.iml
 Dockerfile
 .dockerignore

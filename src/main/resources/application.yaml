@@ -35,7 +35,8 @@ logging:
     pattern.correlation: "[${spring.application.name:},%X{traceId:-},%X{spanId:-}] "
     include-application-name: false
     level:
-        root: debug
+        # debug on root buries the flow you came to read. Raise it when you need the plumbing.
+        root: info
         javax: error
         sun: error
         jdk: error

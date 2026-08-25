@@ -15,9 +15,11 @@ class WorkService {
     }
 
     fun doSomeWork(workPayload: WorkPayload) {
-        log.info("id ${workPayload.id} says ${workPayload.body}")
-        if (workPayload.id == "2") {
-            throw RuntimeException("Pseudo Error")
+        // Ordinary validation. Nothing in here knows it is being demonstrated - the caller decides
+        // what to send, and this service decides what it can process.
+        if (workPayload.body.isBlank()) {
+            throw UnprocessableWorkException(workPayload.id)
         }
+        log.info("id ${workPayload.id} says ${workPayload.body}")
     }
 }

@@ -41,6 +41,9 @@ dependencies {
     testImplementation("org.apache.qpid:qpid-broker-core:$qpidVersion")
     testImplementation("org.apache.qpid:qpid-broker-plugins-memory-store:$qpidVersion")
     testImplementation("org.apache.qpid:qpid-broker-plugins-amqp-0-8-protocol:$qpidVersion")
+    // Arrives transitively via the amqp-test starter, but the tests use AssertJ and JUnit
+    // directly - depend on what you import.
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-amqp-test")
     testImplementation("org.springframework.integration:spring-integration-test")
     testImplementation("org.mockito:mockito-core")

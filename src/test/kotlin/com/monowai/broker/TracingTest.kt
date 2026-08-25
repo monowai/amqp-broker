@@ -1,6 +1,6 @@
 package com.monowai.broker
 
-import com.monowai.broker.integration.WorkPublisher
+import com.monowai.broker.integration.WorkGateway
 import com.monowai.broker.model.WorkPayload
 import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter
@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Import
 @Import(QpidBrokerConfig::class, TracingTestConfig::class)
 class TracingTest {
     @Autowired
-    lateinit var publisher: WorkPublisher.WorkGateway
+    lateinit var publisher: WorkGateway
 
     @Autowired
     lateinit var spans: InMemorySpanExporter
@@ -57,7 +57,7 @@ class TracingTest {
     @Test
     fun failurePathStaysInOneTrace() {
         // WorkService throws on id "2" - no mocking, this is the real failure.
-        publisher.publish(WorkPayload("2", "Error Payload"))
+        publisher.publish(WorkPayload("2", "")) // empty body - WorkService cannot process it
 
         val captured = awaitSpans(5)
 
@@ -83,7 +83,7 @@ class TracingTest {
 
     @Test
     fun theFailedConsumeIsMarkedInError() {
-        publisher.publish(WorkPayload("2", "Error Payload"))
+        publisher.publish(WorkPayload("2", "")) // empty body - WorkService cannot process it
 
         val receive = awaitSpans(5).named("work receive")
 
@@ -95,7 +95,7 @@ class TracingTest {
 
     @Test
     fun theDeadLetteredMessageCarriesTheTrace() {
-        publisher.publish(WorkPayload("2", "Error Payload"))
+        publisher.publish(WorkPayload("2", "")) // empty body - WorkService cannot process it
         val captured = awaitSpans(5)
 
         val dead = rabbitTemplate.receive(WORK_DLQ)
